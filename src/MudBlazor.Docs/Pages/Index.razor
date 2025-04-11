@@ -375,7 +375,7 @@
     protected override async Task OnInitializedAsync()
     {
         _discordInvite = await DiscordApiClient.GetDiscordInviteAsync();
-        _nugetPackage = await NugetApiClient.GetPackageAsync("mudblazor");
+        _nugetPackage = await NugetApiClient.GetPackageAsync("MudBlazor");
         _gitHubRepo = await GitHubApiClient.GetRepositoryAsync("MudBlazor", "MudBlazor");
         _gitHubTotalContributors = await GitHubApiClient.GetContributorsCountAsync("MudBlazor", "MudBlazor");
     }

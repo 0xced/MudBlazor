@@ -1,39 +1,29 @@
-﻿// Copyright (c) MudBlazor 2021
+// Copyright (c) MudBlazor 2021
 // MudBlazor licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using System.Net.Http.Json;
-using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using MudBlazor.Docs.Models;
-using MudBlazor.Docs.Models.Context;
+using NuGet.Common;
+using NuGet.Configuration;
+using NuGet.Protocol;
+using NuGet.Protocol.Core.Types;
 
 namespace MudBlazor.Docs.Services
 {
 #nullable enable
-    public class NugetApiClient : IDisposable
+    public class NugetApiClient
     {
-        private readonly HttpClient _http;
-        private readonly JsonSerializerOptions _jsonSerializerOptions;
-
-        public NugetApiClient()
-        {
-            _http = new HttpClient
-            {
-                BaseAddress = new Uri("https://azuresearch-usnc.nuget.org/")
-            };
-            _jsonSerializerOptions = new JsonSerializerOptions
-            {
-                TypeInfoResolver = JsonTypeInfoResolver.Combine(NugetApiJsonSerializerContext.Default)
-            };
-        }
+        private readonly SourceRepository _repository = Repository.Factory.GetCoreV3(NuGetConstants.V3FeedUrl, FeedType.HttpV3);
+        private readonly SemaphoreSlim _semaphore = new(1, 1);
+        private PackageSearchResource? _packageSearch;
 
         public async Task<NugetPackage?> GetPackageAsync(string packageName)
         {
             try
             {
-                var result = await _http.GetFromJsonAsync<NugetResponse>($"query?q=packageid:{packageName}&take=1", _jsonSerializerOptions);
-                return result?.Data.FirstOrDefault();
+                var search = await GetPackageSearchResourceAsync();
+                var result = await search.SearchAsync($"packageid:{packageName}", new SearchFilter(includePrerelease: false), skip: 0, take: 1, NullLogger.Instance, CancellationToken.None);
+                return new NugetPackage { TotalDownloads = result.FirstOrDefault()?.DownloadCount };
             }
             catch (Exception e)
             {
@@ -42,9 +32,24 @@ namespace MudBlazor.Docs.Services
             }
         }
 
-        public void Dispose()
+        private async Task<PackageSearchResource> GetPackageSearchResourceAsync()
         {
-            _http.Dispose();
+            if (_packageSearch != null)
+            {
+                return _packageSearch;
+            }
+
+            try
+            {
+                await _semaphore.WaitAsync();
+                _packageSearch = await _repository.GetResourceAsync<PackageSearchResource>();
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+
+            return _packageSearch;
         }
     }
 }
